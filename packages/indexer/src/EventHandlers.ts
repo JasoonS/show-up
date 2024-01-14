@@ -16,6 +16,10 @@ import { TryFetchIpfsFile } from "./utils/ipfs"
 import { GetStatusId, GetVisibilityId, Slugify } from "./utils/mapping"
 import { decodeAbiParameters } from 'viem'
 import dayjs from 'dayjs'
+import { ConditionModule } from "./src/DbFunctions.bs"
+
+import { makeEventId, makeModuleId } from "./utils/entityId"
+import { make } from "./src/ContractAddressingMap.bs"
 
 const Erc20ABI = [
   { name: "decimals", type: "function", inputs: [], outputs: [{ name: "", type: "uint8" }] },
@@ -29,31 +33,22 @@ const SplitEtherDataParams = [{ name: "depositFee", type: "uint256" }]
 const SplitTokenDataParams = [{ name: "depositFee", type: "uint256" }, { name: "tokenAddress", type: "address" }]
 
 ShowHubContract_ConditionModuleWhitelisted_loader(({ event, context }) => {
-  const moduleId = `${event.chainId}-${event.params.conditionModule}`
-  context.log.debug(`Processing ShowHubContract_ConditionModuleWhitelisted @ chain ${event.chainId} | Block # ${event.blockNumber}`)
+  const moduleId = makeModuleId(event)
 
-  context.ConditionModule.load(moduleId)
+  context.ConditionModule.conditionModuleLoad(moduleId)
 })
 
 ShowHubContract_ConditionModuleWhitelisted_handler(({ event, context }) => {
-  const chainId = event.chainId
-  const moduleId = `${chainId}-${event.params.conditionModule}`
-  context.log.debug(`Processing ShowHubContract_ConditionModuleWhitelisted @ chain ${chainId} | Block # ${event.blockNumber}`)
-
-  let module = context.ConditionModule.get(moduleId)
-  if (module == null) {
-    module = {
-      id: moduleId,
-      address: event.params.conditionModule,
-      chainId: chainId,
-      createdAt: BigInt(event.params.timestamp),
-      createdBy: event.params.sender,
-      blockNumber: BigInt(event.blockNumber),
-      transactionHash: event.transactionHash,
-
-      name: event.params.name,
-      whitelisted: event.params.whitelisted,
-    }
+  let module = context.ConditionModule.conditionModule || {
+    id: `${event.chainId}-${event.params.conditionModule}`,
+    address: event.params.conditionModule,
+    chainId: event.chainId,
+    createdAt: BigInt(event.params.timestamp),
+    createdBy: event.params.sender,
+    blockNumber: BigInt(event.blockNumber),
+    transactionHash: event.transactionHash,
+    name: event.params.name,
+    whitelisted: event.params.whitelisted,
   }
 
   context.ConditionModule.set({
@@ -65,7 +60,7 @@ ShowHubContract_ConditionModuleWhitelisted_handler(({ event, context }) => {
 ShowHubContract_Created_handlerAsync(async ({ event, context }) => {
   const chainId = event.chainId
   const eventId = `${chainId}-${event.params.id}`
-  const moduleId = `${chainId}-${event.params.conditionModule}`
+  const moduleId = makeModuleId(event)
   const dataId = `${chainId}-${event.params.id}-${event.params.conditionModule}`
   context.log.debug(`Processing ShowHubContract_Created # ${eventId} @ Block # ${event.blockNumber}`)
 
@@ -229,7 +224,7 @@ ShowHubContract_Created_handlerAsync(async ({ event, context }) => {
 
 ShowHubContract_Updated_handlerAsync(async ({ event, context }) => {
   const chainId = event.chainId
-  const eventId = `${chainId}-${event.params.id}`
+  const eventId = makeEventId(event)
   context.log.debug(`Processing ShowHubContract_Updated # ${eventId} @ Block # ${event.blockNumber}`)
 
   let entity = await context.Record.get(eventId)
@@ -251,7 +246,7 @@ ShowHubContract_Updated_handlerAsync(async ({ event, context }) => {
 
 ShowHubContract_Canceled_handlerAsync(async ({ event, context }) => {
   const chainId = event.chainId
-  const eventId = `${chainId}-${event.params.id}`
+  const eventId = makeEventId(event)
   context.log.debug(`Processing ShowHubContract_Canceled # ${eventId} @ Block # ${event.blockNumber}`)
 
   let entity = await context.Record.get(eventId)
@@ -269,7 +264,7 @@ ShowHubContract_Canceled_handlerAsync(async ({ event, context }) => {
 
 ShowHubContract_Funded_handlerAsync(async ({ event, context }) => {
   const chainId = event.chainId
-  const eventId = `${chainId}-${event.params.id}`
+  const eventId = makeEventId(event)
   context.log.debug(`Processing ShowHubContract_Funded # ${eventId} @ Block # ${event.blockNumber}`)
 
   let entity = await context.Record.get(eventId)
@@ -278,11 +273,7 @@ ShowHubContract_Funded_handlerAsync(async ({ event, context }) => {
     return
   }
 
-  let conditionModule = await context.ConditionModule.get(entity.conditionModule)
-  if (conditionModule == null) {
-    context.log.error(`ConditionModule ${entity.conditionModule} not found`)
-    return
-  }
+  let conditionModule = await context.Record.getConditionModule(entity)
 
   try {
     const client = GetClient(chainId)
@@ -304,7 +295,7 @@ ShowHubContract_Funded_handlerAsync(async ({ event, context }) => {
 
 ShowHubContract_Registered_handlerAsync(async ({ event, context }) => {
   const chainId = event.chainId
-  const eventId = `${chainId}-${event.params.id}`
+  const eventId = makeEventId(event)
   context.log.debug(`Processing ShowHubContract_Registered # ${eventId} @ Block # ${event.blockNumber}`)
 
   let entity = await context.Record.get(eventId)
@@ -340,7 +331,7 @@ ShowHubContract_Registered_handlerAsync(async ({ event, context }) => {
 
 ShowHubContract_CheckedIn_handler(({ event, context }) => {
   const chainId = event.chainId
-  const eventId = `${chainId}-${event.params.id}`
+  const eventId = makeEventId(event)
   context.log.debug(`Processing ShowHubContract_CheckedIn # ${eventId} @ Block # ${event.blockNumber}`)
 
   const entity = context.Record.get(eventId)
@@ -370,7 +361,7 @@ ShowHubContract_CheckedIn_handler(({ event, context }) => {
 
 ShowHubContract_Settled_handler(({ event, context }) => {
   const chainId = event.chainId
-  const eventId = `${chainId}-${event.params.id}`
+  const eventId = makeEventId(event)
   context.log.debug(`Processing ShowHubContract_Settled # ${eventId} @ Block # ${event.blockNumber}`)
 
   let entity = context.Record.get(eventId)
